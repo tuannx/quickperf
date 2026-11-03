@@ -101,5 +101,152 @@
                 </plugins>
             </build>
         </profile>
+        <!-- Opt-in vmlens data-race tests living in src/vmlens-test.
+             Inactive by default: the default build neither compiles these tests nor
+             resolves vmlens artifacts. Activate with -Pvmlens and run the verify phase
+             so the agent is installed before the tests and the report is generated
+             after them:
+                 mvn -Pvmlens -pl sql/sql-annotations -am verify
+             (the profile exists only in this module, so the -am reactor modules build
+             and test exactly as usual; in this module surefire is restricted to the
+             *VmlensTest classes. See src/vmlens-test/README.md for semantics.)
+             Requires JDK 11+. Never combine with -Pfray: the two agents must not run
+             in the same JVM; the Fray pass (fork PR #1) and this vmlens pass are
+             independent passes over the same three components. -->
+        <profile>
+            <id>vmlens</id>
+            <properties>
+                <maven.compiler.testSource>11</maven.compiler.testSource>
+                <maven.compiler.testTarget>11</maven.compiler.testTarget>
+                <vmlens.version>1.2.28</vmlens.version>
+                <vmlens.agent.directory>${project.build.directory}/vmlens-agent</vmlens.agent.directory>
+                <vmlens.report.directory>${project.build.directory}/reports/vmlens</vmlens.report.directory>
+                <vmlens.standalone.jar>${project.build.directory}/vmlens-standalone/standalone-${vmlens.version}.jar</vmlens.standalone.jar>
+            </properties>
+            <dependencies>
+                <dependency>
+                    <groupId>com.vmlens</groupId>
+                    <artifactId>api</artifactId>
+                    <version>${vmlens.version}</version>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
+                    <groupId>com.vmlens</groupId>
+                    <artifactId>standalone</artifactId>
+                    <version>${vmlens.version}</version>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
+                    <groupId>org.junit.jupiter</groupId>
+                    <artifactId>junit-jupiter</artifactId>
+                    <version>5.11.3</version>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>3.6.0</version>
+                        <executions>
+                            <execution>
+                                <id>add-vmlens-test-source</id>
+                                <phase>generate-test-sources</phase>
+                                <goals>
+                                    <goal>add-test-source</goal>
+                                </goals>
+                                <configuration>
+                                    <sources>
+                                        <source>src/vmlens-test/java</source>
+                                    </sources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-dependency-plugin</artifactId>
+                        <version>3.8.1</version>
+                        <executions>
+                            <execution>
+                                <id>copy-vmlens-standalone</id>
+                                <phase>generate-test-resources</phase>
+                                <goals>
+                                    <goal>copy</goal>
+                                </goals>
+                                <configuration>
+                                    <artifactItems>
+                                        <artifactItem>
+                                            <groupId>com.vmlens</groupId>
+                                            <artifactId>standalone</artifactId>
+                                            <version>${vmlens.version}</version>
+                                            <outputDirectory>${project.build.directory}/vmlens-standalone</outputDirectory>
+                                        </artifactItem>
+                                    </artifactItems>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.5.0</version>
+                        <executions>
+                            <!-- Equivalent of the Gradle installVmlensAgent task used by the
+                                 ServiceTalk harness: creates ${vmlens.agent.directory}. -->
+                            <execution>
+                                <id>install-vmlens-agent</id>
+                                <phase>process-test-classes</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>${java.home}/bin/java</executable>
+                                    <workingDirectory>${project.build.directory}</workingDirectory>
+                                    <arguments>
+                                        <argument>-jar</argument>
+                                        <argument>${vmlens.standalone.jar}</argument>
+                                        <argument>install</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                            <!-- Equivalent of vmlensReport: the race verdict (Data race /
+                                 Success per run) is written to ${vmlens.report.directory}. -->
+                            <execution>
+                                <id>vmlens-report</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>${java.home}/bin/java</executable>
+                                    <arguments>
+                                        <argument>-jar</argument>
+                                        <argument>${vmlens.standalone.jar}</argument>
+                                        <argument>-a</argument>
+                                        <argument>${vmlens.agent.directory}</argument>
+                                        <argument>-r</argument>
+                                        <argument>${vmlens.report.directory}</argument>
+                                        <argument>report</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <parallel>none</parallel>
+                            <threadCount>1</threadCount>
+                            <argLine>-javaagent:${vmlens.agent.directory}/agent.jar</argLine>
+                            <includes>
+                                <include>**/*VmlensTest.java</include>
+                            </includes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 </project>
