@@ -51,4 +51,55 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <profiles>
+        <!-- Opt-in Fray controlled-concurrency tests living in src/fray-test.
+             Inactive by default: the default build neither compiles these tests nor
+             resolves Fray artifacts. Activate with -Pfray. Executing the tests also
+             requires a JDK 25 instrumented by Fray; see src/fray-test/README.md. -->
+        <profile>
+            <id>fray</id>
+            <properties>
+                <maven.compiler.testSource>11</maven.compiler.testSource>
+                <maven.compiler.testTarget>11</maven.compiler.testTarget>
+            </properties>
+            <dependencies>
+                <dependency>
+                    <groupId>org.pastalab.fray</groupId>
+                    <artifactId>fray-junit</artifactId>
+                    <version>0.9.2</version>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
+                    <groupId>org.junit.jupiter</groupId>
+                    <artifactId>junit-jupiter</artifactId>
+                    <version>5.11.3</version>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>3.6.0</version>
+                        <executions>
+                            <execution>
+                                <id>add-fray-test-source</id>
+                                <phase>generate-test-sources</phase>
+                                <goals>
+                                    <goal>add-test-source</goal>
+                                </goals>
+                                <configuration>
+                                    <sources>
+                                        <source>src/fray-test/java</source>
+                                    </sources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
